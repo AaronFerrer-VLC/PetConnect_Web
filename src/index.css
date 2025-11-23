@@ -1,0 +1,171 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ======== Tema base (claro) ======== */
+:root {
+  /* fondo/texto */
+  --bg: #ffffff;
+  --fg: #0f172a;
+
+  /* inputs (claro) */
+  --input-bg: #ffffff;
+  --input-fg: #0f172a;
+  --input-placeholder: #64748b;
+  --input-border: #e2e8f0;
+  --input-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+
+  /* brand por defecto (emerald) */
+  --brand-h: 160;
+  --brand-s: 84%;
+  --brand-l: 39%;
+  --on-brand: #ffffff;
+
+  --brand: hsl(var(--brand-h) var(--brand-s) var(--brand-l));
+  --brand-600: hsl(var(--brand-h) var(--brand-s) calc(var(--brand-l) - 4%));
+  --brand-700: hsl(var(--brand-h) var(--brand-s) calc(var(--brand-l) - 8%));
+}
+
+/* ======== Tema oscuro ======== */
+.dark {
+  --bg: #0b0c10;
+  --fg: #f5f7fb;
+
+  --input-bg: #0f172a;
+  /* pizarra */
+  --input-fg: #e5e7eb;
+  --input-placeholder: #94a3b8;
+  --input-border: #334155;
+  --input-shadow: 0 1px 2px rgba(0, 0, 0, .25);
+
+  /* para iconos de date en webkit */
+  --calendar-invert: 1;
+}
+
+/* ======== Resets + esquema de color ======== */
+html {
+  color-scheme: light;
+}
+
+.dark html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+a {
+  color: inherit;
+}
+
+/* ======== Inputs unificados ======== */
+/* Quitamos el hardcode de texto negro y usamos variables */
+input,
+textarea,
+select {
+  background-color: var(--input-bg);
+  color: var(--input-fg);
+  border: 1px solid var(--input-border);
+  border-radius: .5rem;
+  /* 8px */
+  padding: .5rem .75rem;
+  /* 8x12 */
+  outline: none;
+  box-shadow: var(--input-shadow);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--input-placeholder);
+  opacity: 1;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand) 25%, transparent);
+}
+
+/* Iconos de calendario/fecha en dark */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(var(--calendar-invert, 0));
+}
+
+/* ======== Utilidades brand ======== */
+.bg-brand {
+  background-color: var(--brand);
+}
+
+.bg-brand-600 {
+  background-color: var(--brand-600);
+}
+
+.bg-brand-700 {
+  background-color: var(--brand-700);
+}
+
+.text-on-brand {
+  color: var(--on-brand);
+}
+
+.border-brand {
+  border-color: var(--brand);
+}
+
+/* ======== Chips/Píldoras unificados ======== */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2rem;
+  padding: 0 .75rem;
+  border-radius: 9999px;
+  border: 1px solid var(--input-border);
+  background: transparent;
+  color: var(--input-fg);
+  font-size: .875rem;
+  /* text-sm */
+  gap: .375rem;
+}
+
+.chip:is(:hover, :focus-visible) {
+  border-color: var(--brand);
+}
+
+.chip--on {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--on-brand);
+}
+
+/* Compact pills con contador (filtros) */
+.pill {
+  @apply inline-flex items-center gap-1 h-8 px-3 rounded-full border text-sm;
+  border-color: var(--input-border);
+  background: transparent;
+  color: var(--input-fg);
+}
+
+.pill__count {
+  @apply inline-flex items-center justify-center text-xs;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 .25rem;
+  border-radius: 9999px;
+  background: color-mix(in oklab, var(--brand) 18%, transparent);
+  color: var(--input-fg);
+}
+
+.pill--on {
+  background: color-mix(in oklab, var(--brand) 12%, transparent);
+  border-color: var(--brand);
+}
+
+/* util de inputs coherente con light/dark */
+.input {
+  @apply h-10 rounded-lg border px-3 border-slate-300 bg-white text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500;
+}
