@@ -19,6 +19,9 @@ export default function SitterCard({ sitter }: { sitter: SitterCard }) {
             )}
           </div>
           <StarRating value={sitter.rating_avg} count={sitter.rating_count} />
+          {sitter.address && (
+            <div className="text-xs text-slate-500 mt-1">📍 {sitter.address}</div>
+          )}
           <div className="text-sm text-slate-400 mt-1 line-clamp-2">{sitter.bio}</div>
           <div className="text-sm mt-2">
             {sitter.min_price != null ? <span className="font-medium">{sitter.min_price} €</span> : null}

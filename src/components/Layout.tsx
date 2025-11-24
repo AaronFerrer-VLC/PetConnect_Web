@@ -79,6 +79,7 @@ export default function Layout({ user, onLogout, children }: LayoutProps) {
               <MenuItem to="/profile" label="Tu perfil" onClick={() => setOpenMenu(false)} />
               <MenuItem to="/messages" label="Bandeja de entrada" onClick={() => setOpenMenu(false)} />
               <MenuItem to="/bookings" label="Reservas" onClick={() => setOpenMenu(false)} />
+              <MenuItem to="/payments" label="Pagos" onClick={() => setOpenMenu(false)} />
               {isCaretaker && (
                 <>
                   <MenuItem to="/availability" label="Calendario" onClick={() => setOpenMenu(false)} />
@@ -170,6 +171,7 @@ export default function Layout({ user, onLogout, children }: LayoutProps) {
                   <MobileItem to="/profile" label="Tu perfil" onClick={() => setMobileOpen(false)} />
                   <MobileItem to="/messages" label="Bandeja de entrada" onClick={() => setMobileOpen(false)} />
                   <MobileItem to="/bookings" label="Reservas" onClick={() => setMobileOpen(false)} />
+                  <MobileItem to="/payments" label="Pagos" onClick={() => setMobileOpen(false)} />
                   {isCaretaker && (
                     <>
                       <MobileItem to="/availability" label="Calendario" onClick={() => setMobileOpen(false)} />

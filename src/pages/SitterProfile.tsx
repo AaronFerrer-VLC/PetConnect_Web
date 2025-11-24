@@ -5,7 +5,7 @@ import StarRating from "../components/StarRating";
 import BookingWidget from "../components/BookingWidget";
 import ReviewForm from "../components/ReviewForm";
 import Button from "../components/Button";
-import { getSitter, getSitterReviews, getMe, BookingsAPI, ServicesAPI, MessagesAPI } from "../lib/api";
+import { getSitter, getSitterReviews, getMe, BookingsAPI, ServicesAPI, MessagesAPI, ReviewsAPI } from "../lib/api";
 
 export default function SitterProfile() {
   const { id } = useParams<{ id: string }>();
@@ -14,10 +14,30 @@ export default function SitterProfile() {
 
   const [data, setData] = useState<any>(null);
   const [reviews, setReviews] = useState<any[]>([]);
+  const [ownerReviews, setOwnerReviews] = useState<any[]>([]);
+  const [showAllSitterReviews, setShowAllSitterReviews] = useState(false);
+  const [showAllOwnerReviews, setShowAllOwnerReviews] = useState(false);
   const [services, setServices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [reviewBookingId, setReviewBookingId] = useState<string | null>(null);
   const [me, setMe] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [needsAuth, setNeedsAuth] = useState(false);
+
+  // Función para recargar reseñas
+  const reloadReviews = async () => {
+    if (!id) return;
+    try {
+      const [sitterData, ownerData] = await Promise.all([
+        getSitterReviews(id).catch(() => []),
+        ReviewsAPI.listByOwner(id).catch(() => []),
+      ]);
+      setReviews(sitterData);
+      setOwnerReviews(ownerData);
+    } catch (error) {
+      console.error("Error reloading reviews:", error);
+    }
+  };
 
   // carga perfil + reseñas + servicios públicos
 useEffect(() => {
@@ -26,20 +46,52 @@ useEffect(() => {
     if (!id) return;
     setLoading(true);
     try {
-      const [p, r, s, user] = await Promise.all([
+      // Intentar cargar datos (algunos pueden fallar si no hay auth, pero getSitter y reviews son públicos)
+      const [p, r, ownerR, s, user] = await Promise.allSettled([
         getSitter(id),
         getSitterReviews(id),
-        ServicesAPI.bySitter(id),
-        getMe(),
+        ReviewsAPI.listByOwner(id).catch(() => []), // Reseñas como dueño
+        ServicesAPI.bySitter(id).catch(() => []), // Si falla, devolver array vacío
+        getMe().catch(() => null), // Si no hay auth, devolver null
       ]);
+      
+      const sitter = p.status === "fulfilled" ? p.value : null;
+      const reviewsData = r.status === "fulfilled" ? r.value : [];
+      const ownerReviewsData = ownerR.status === "fulfilled" ? ownerR.value : [];
+      const servicesData = s.status === "fulfilled" ? s.value : [];
+      const userData = user.status === "fulfilled" ? user.value : null;
+      
       if (!alive) return;
-      setData(p);
-      setReviews(r);
-      setServices(s.filter((x: any) => x.enabled !== false));
-      setMe(user);
-    } catch (e) {
+      
+      if (!sitter) {
+        // Si no se pudo obtener el sitter, verificar el error
+        if (p.status === "rejected") {
+          const errorMsg = String(p.reason?.message || p.reason);
+          if (errorMsg.includes("401") || errorMsg.includes("autenticación") || errorMsg.includes("Token")) {
+            setNeedsAuth(true);
+          }
+          setError(errorMsg);
+        }
+        setData(null);
+        setReviews([]);
+        setServices([]);
+        return;
+      }
+      
+      setData(sitter);
+      setReviews(reviewsData);
+      setOwnerReviews(ownerReviewsData);
+      setServices(servicesData.filter((x: any) => x.enabled !== false));
+      setMe(userData);
+    } catch (e: any) {
       if (alive) {
-        setData(null);         // mostrará "No encontrado"
+        const errorMsg = e?.message || String(e);
+        setError(errorMsg);
+        // Verificar si es error de autenticación
+        if (errorMsg.includes("401") || errorMsg.includes("autenticación") || errorMsg.includes("Token")) {
+          setNeedsAuth(true);
+        }
+        setData(null);
         setReviews([]);
         setServices([]);
       }
@@ -74,21 +126,61 @@ useEffect(() => {
   }, [search, id]);
 
   if (loading) return <div className="p-6">Cargando…</div>;
-  if (!data) return <div className="p-6">No encontrado</div>;
+  
+  if (!data) {
+    // Si hay error de autenticación, mostrar mensaje amigable
+    if (needsAuth || error?.includes("401") || error?.includes("autenticación")) {
+      return (
+        <div className="max-w-2xl mx-auto p-6 text-center">
+          <h1 className="text-2xl font-semibold mb-4">Inicia sesión para ver este perfil</h1>
+          <p className="text-slate-400 mb-6">
+            Necesitas tener una cuenta para ver los perfiles de los cuidadores y hacer reservas.
+          </p>
+          <div className="flex gap-4 justify-center">
+            <Button variant="brand" onClick={() => nav(`/login?next=${encodeURIComponent(window.location.pathname)}`)}>
+              Iniciar sesión
+            </Button>
+            <Button variant="outline" onClick={() => nav(`/signup?next=${encodeURIComponent(window.location.pathname)}`)}>
+              Crear cuenta
+            </Button>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="p-6 text-center">
+        <h1 className="text-xl font-semibold mb-2">Cuidador no encontrado</h1>
+        <p className="text-slate-400 mb-4">El perfil que buscas no existe o ha sido eliminado.</p>
+        <Button variant="outline" onClick={() => nav("/search")}>
+          Volver a búsqueda
+        </Button>
+      </div>
+    );
+  }
 
   const blocked = new Set<string>(data?.availability?.blocked_dates || []);
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6">
       <div className="flex gap-6">
-        <img src={(data.photos && data.photos[0]) || "/placeholder-avatar.png"} className="w-32 h-32 rounded-2xl object-cover" />
-        <div className="flex-1">
-          <h1 className="text-2xl font-semibold">{data.name}</h1>
-          <div className="text-slate-500">{data.city}</div>
-          <StarRating value={data.rating_avg} count={data.rating_count} />
-          <p className="mt-3 text-slate-300">{data.bio}</p>
-          <div className="mt-3 text-sm text-slate-400">Acepta tamaños: {(data.accepts_sizes || []).join(", ") || "—"}</div>
-        </div>
+        <img src={data.photo || (data.gallery && data.gallery[0]) || "/placeholder-avatar.png"} className="w-32 h-32 rounded-2xl object-cover" />
+            <div className="flex-1">
+              <h1 className="text-2xl font-semibold">{data.name}</h1>
+              <div className="text-slate-500">{data.city}</div>
+              {data.address && (
+                <div className="text-sm text-slate-400 mt-1">📍 {data.address}</div>
+              )}
+              <StarRating value={data.rating_avg} count={data.rating_count} />
+              <p className="mt-3 text-slate-300">{data.bio || data.profile?.bio || ""}</p>
+              <div className="mt-3 text-sm text-slate-400">Acepta tamaños: {(data.accepts_sizes || []).join(", ") || "—"}</div>
+              {data.phone && (
+                <div className="mt-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+                  <div className="text-sm font-medium text-emerald-400">📞 Teléfono de emergencia</div>
+                  <div className="text-lg font-semibold text-emerald-300 mt-1">{data.phone}</div>
+                  <div className="text-xs text-slate-400 mt-1">Visible porque has pagado una reserva con este cuidador</div>
+                </div>
+              )}
+            </div>
       </div>
 
       <h2 className="text-xl font-semibold mt-8 mb-3">Servicios</h2>
@@ -186,29 +278,80 @@ useEffect(() => {
           <ReviewForm
             bookingId={reviewBookingId}
             sitterId={data.id}
-            onCreated={() => {
+            reviewType="sitter"
+            onCreated={async () => {
               setReviewBookingId(null);
+              // Recargar reseñas para que se vean inmediatamente
+              await reloadReviews();
             }}
           />
         </div>
       )}
 
-      <h2 className="text-xl font-semibold mt-8 mb-3">Reseñas</h2>
+      {/* Reseñas como cuidador */}
+      <h2 className="text-xl font-semibold mt-8 mb-3">Reseñas como cuidador</h2>
       <div className="space-y-3">
         {reviews.length === 0 ? (
-          <div className="text-slate-400">Aún no hay reseñas.</div>
+          <div className="text-slate-400">Aún no hay reseñas como cuidador.</div>
         ) : (
-          reviews.map((r: any) => (
-            <div key={r.id} className="rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
-              <div className="flex items-center justify-between">
-                <div className="font-medium">{r.author}</div>
-                <StarRating value={r.rating} size="sm" />
+          <>
+            {(showAllSitterReviews ? reviews : reviews.slice(0, 3)).map((r: any) => (
+              <div key={r.id} className="rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
+                <div className="flex items-center justify-between">
+                  <div className="font-medium">{r.author}</div>
+                  <StarRating value={r.rating} size="sm" />
+                </div>
+                <div className="text-sm text-slate-300 mt-2">{r.comment}</div>
+                <div className="text-xs text-slate-400 mt-1">
+                  {new Date(r.created_at || "").toLocaleDateString()}
+                </div>
               </div>
-              <div className="text-sm text-slate-300 mt-2">{r.comment}</div>
-            </div>
-          ))
+            ))}
+            {reviews.length > 3 && (
+              <Button
+                variant="outline"
+                onClick={() => setShowAllSitterReviews(!showAllSitterReviews)}
+                className="w-full"
+              >
+                {showAllSitterReviews ? "Ver menos" : `Ver más reseñas (${reviews.length - 3} más)`}
+              </Button>
+            )}
+          </>
         )}
       </div>
+
+      {/* Reseñas como dueño */}
+      {ownerReviews.length > 0 && (
+        <>
+          <h2 className="text-xl font-semibold mt-8 mb-3">Reseñas como dueño</h2>
+          <div className="text-sm text-slate-400 mb-3">
+            Reseñas que otros cuidadores han dejado sobre {data.name} como dueño de mascota.
+          </div>
+          <div className="space-y-3">
+            {(showAllOwnerReviews ? ownerReviews : ownerReviews.slice(0, 3)).map((r: any) => (
+              <div key={r.id} className="rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
+                <div className="flex items-center justify-between">
+                  <div className="font-medium">{r.author}</div>
+                  <StarRating value={r.rating} size="sm" />
+                </div>
+                <div className="text-sm text-slate-300 mt-2">{r.comment}</div>
+                <div className="text-xs text-slate-400 mt-1">
+                  {new Date(r.created_at || "").toLocaleDateString()}
+                </div>
+              </div>
+            ))}
+            {ownerReviews.length > 3 && (
+              <Button
+                variant="outline"
+                onClick={() => setShowAllOwnerReviews(!showAllOwnerReviews)}
+                className="w-full"
+              >
+                {showAllOwnerReviews ? "Ver menos" : `Ver más reseñas (${ownerReviews.length - 3} más)`}
+              </Button>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

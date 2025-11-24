@@ -1,13 +1,16 @@
 // src/pages/Pets.tsx
 import { useEffect, useState } from "react";
 import Button from "../components/Button";
-import { PetsAPI } from "../lib/api";
+import { PetsAPI, ReviewsAPI } from "../lib/api";
 import type { Pet } from "../lib/types";
+import StarRating from "../components/StarRating";
 
 export default function Pets({ user }: { user: any }) {
   const [list, setList] = useState<Pet[]>([]);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [petReviews, setPetReviews] = useState<Record<string, any[]>>({});
+  const [expandedPetReviews, setExpandedPetReviews] = useState<Record<string, boolean>>({});
 
   const empty: Pet = {
     id: "" as any,
@@ -23,12 +26,27 @@ export default function Pets({ user }: { user: any }) {
     notes: "",
   };
   const [form, setForm] = useState<Pet>(empty);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [err, setErr] = useState("");
 
   useEffect(() => {
     (async () => {
       try {
-        setList(await PetsAPI.list());
+        const pets = await PetsAPI.listMine(); // Usar listMine para obtener solo las mascotas del usuario actual
+        setList(pets);
+        
+        // Cargar reseñas para cada mascota
+        const reviewsMap: Record<string, any[]> = {};
+        for (const pet of pets) {
+          try {
+            const reviews = await ReviewsAPI.listByPet(pet.id);
+            reviewsMap[pet.id] = reviews;
+          } catch (e) {
+            console.error(`Error loading reviews for pet ${pet.id}:`, e);
+            reviewsMap[pet.id] = [];
+          }
+        }
+        setPetReviews(reviewsMap);
       } catch {
         setList([]);
       }
@@ -51,6 +69,10 @@ export default function Pets({ user }: { user: any }) {
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (editingId) {
+      await saveEdit(e);
+      return;
+    }
     setSaving(true);
     setErr("");
     try {
@@ -62,6 +84,32 @@ export default function Pets({ user }: { user: any }) {
       setOpen(false);
     } catch (e: any) {
       setErr(e.message || "No se pudo guardar");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const startEdit = (pet: Pet) => {
+    setForm(pet);
+    setEditingId(pet.id);
+    setOpen(true);
+  };
+
+  const saveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingId) return;
+    setSaving(true);
+    setErr("");
+    try {
+      const payload = { ...form };
+      delete (payload as any).id;
+      const updated = await PetsAPI.update(editingId, payload);
+      setList((prev) => prev.map((p) => (p.id === editingId ? updated : p)));
+      setForm(empty);
+      setEditingId(null);
+      setOpen(false);
+    } catch (e: any) {
+      setErr(e.message || "No se pudo actualizar");
     } finally {
       setSaving(false);
     }
@@ -95,13 +143,44 @@ export default function Pets({ user }: { user: any }) {
                   <div className="font-medium">{p.name}</div>
                   <div className="text-sm text-slate-500">{p.breed || "—"}</div>
                 </div>
-                <button className="text-red-500 text-sm" onClick={() => remove(p.id)}>Eliminar</button>
+                <div className="flex gap-2">
+                  <button className="text-blue-500 text-sm" onClick={() => startEdit(p)}>Editar</button>
+                  <button className="text-red-500 text-sm" onClick={() => remove(p.id)}>Eliminar</button>
+                </div>
               </div>
               {(p.personality || p.care_instructions || p.needs) && (
                 <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">
                   {p.personality && <div><span className="font-medium">Cómo es:</span> {p.personality}</div>}
                   {p.care_instructions && <div><span className="font-medium">Cuidados:</span> {p.care_instructions}</div>}
                   {p.needs && <div><span className="font-medium">Necesidades:</span> {p.needs}</div>}
+                </div>
+              )}
+              {petReviews[p.id] && petReviews[p.id].length > 0 && (
+                <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+                  <div className="text-sm font-medium mb-2">Reseñas del cuidador</div>
+                  <div className="space-y-2">
+                    {(expandedPetReviews[p.id] ? petReviews[p.id] : petReviews[p.id].slice(0, 3)).map((review: any) => (
+                      <div key={review.id} className="text-sm">
+                        <div className="flex items-center gap-2">
+                          <StarRating value={review.rating} size="sm" />
+                          <span className="text-xs text-slate-400">
+                            {new Date(review.created_at || "").toLocaleDateString()}
+                          </span>
+                        </div>
+                        {review.comment && (
+                          <p className="text-slate-500 mt-1">{review.comment}</p>
+                        )}
+                      </div>
+                    ))}
+                    {petReviews[p.id].length > 3 && (
+                      <button
+                        onClick={() => setExpandedPetReviews(prev => ({ ...prev, [p.id]: !prev[p.id] }))}
+                        className="text-xs text-blue-500 hover:underline mt-2"
+                      >
+                        {expandedPetReviews[p.id] ? "Ver menos" : `Ver más reseñas (${petReviews[p.id].length - 3} más)`}
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
             </li>
@@ -114,8 +193,8 @@ export default function Pets({ user }: { user: any }) {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="max-w-2xl w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
             <div className="flex items-center justify-between mb-3">
-              <div className="text-lg font-semibold">Nueva mascota</div>
-              <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-200">✕</button>
+              <div className="text-lg font-semibold">{editingId ? "Editar mascota" : "Nueva mascota"}</div>
+              <button onClick={() => { setOpen(false); setForm(empty); setEditingId(null); }} className="text-slate-400 hover:text-slate-200">✕</button>
             </div>
 
             <form onSubmit={create} className="grid md:grid-cols-2 gap-3">

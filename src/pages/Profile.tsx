@@ -1,7 +1,8 @@
 // src/pages/Profile.tsx
 import { useEffect, useState } from "react";
 import Button from "../components/Button";
-import { AuthAPI, UsersAPI } from "../lib/api";
+import { AuthAPI, UsersAPI, ReviewsAPI } from "../lib/api";
+import StarRating from "../components/StarRating";
 
 function toDataURL(file: File) {
   return new Promise<string>((ok, ko) => {
@@ -15,6 +16,10 @@ function toDataURL(file: File) {
 export default function Profile() {
   const [me, setMe] = useState<any>(null);
   const [saving, setSaving] = useState(false);
+  const [ownerReviews, setOwnerReviews] = useState<any[]>([]);
+  const [sitterReviews, setSitterReviews] = useState<any[]>([]);
+  const [showAllOwnerReviews, setShowAllOwnerReviews] = useState(false);
+  const [showAllSitterReviews, setShowAllSitterReviews] = useState(false);
   const [form, setForm] = useState<{
     name?: string;
     city?: string;
@@ -26,7 +31,28 @@ export default function Profile() {
     (async () => {
       const u = await AuthAPI.me();
       setMe(u);
-      setForm({ name: u.name, city: u.city || "", bio: u.bio || "", photo: u.photo || null });
+      // La biografía puede estar en u.bio o en u.profile.bio
+      const bio = u.bio || u.profile?.bio || "";
+      setForm({ 
+        name: u.name, 
+        city: u.city || "", 
+        bio, 
+        photo: u.photo || null,
+        address: u.address || "",
+        phone: u.phone || "",
+      });
+      
+      // Cargar reseñas: como dueño (owner) y como cuidador (sitter)
+      try {
+        const [ownerRev, sitterRev] = await Promise.all([
+          ReviewsAPI.listByOwner(u.id).catch(() => []),
+          ReviewsAPI.listBySitter(u.id).catch(() => []),
+        ]);
+        setOwnerReviews(ownerRev);
+        setSitterReviews(sitterRev);
+      } catch (e) {
+        console.error("Error loading reviews:", e);
+      }
     })();
   }, []);
 
@@ -45,6 +71,8 @@ export default function Profile() {
         city: form.city,
         bio: form.bio,
         photo: form.photo || undefined,
+        address: form.address || undefined,
+        phone: form.phone || undefined,
       });
       setMe(updated);
       alert("Perfil actualizado.");
@@ -116,6 +144,27 @@ export default function Profile() {
           rows={4}
         />
 
+        {me?.is_caretaker && (
+          <>
+            <input
+              className="input w-full md:col-span-2"
+              placeholder="Dirección (calle, número, barrio)"
+              value={form.address || ""}
+              onChange={(e) => setForm({ ...form, address: e.target.value })}
+            />
+            <input
+              className="input w-full md:col-span-2"
+              type="tel"
+              placeholder="Teléfono de contacto (para emergencias)"
+              value={form.phone || ""}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+            />
+            <p className="text-xs text-slate-500 md:col-span-2">
+              El teléfono solo será visible para dueños que hayan pagado una reserva contigo.
+            </p>
+          </>
+        )}
+
         <div className="md:col-span-2 flex justify-end">
           <Button disabled={saving} type="submit">
             {saving ? "Guardando…" : "Guardar"}
@@ -172,6 +221,76 @@ export default function Profile() {
           <div className="text-sm text-slate-500 mt-2">Aún no has subido fotos.</div>
         )}
       </div>
+
+      {/* Reseñas como dueño */}
+      {ownerReviews.length > 0 && (
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 p-3 sm:p-4 mt-6">
+          <div className="font-semibold mb-3">Reseñas como dueño</div>
+          <div className="text-sm text-slate-500 mb-3">
+            Reseñas que los cuidadores han dejado sobre ti como dueño de mascota.
+          </div>
+          <div className="space-y-3">
+            {(showAllOwnerReviews ? ownerReviews : ownerReviews.slice(0, 3)).map((r: any) => (
+              <div key={r.id} className="rounded-xl border border-slate-200 dark:border-slate-800 p-3">
+                <div className="flex items-center justify-between">
+                  <div className="font-medium text-sm">{r.author}</div>
+                  <StarRating value={r.rating} size="sm" />
+                </div>
+                {r.comment && (
+                  <div className="text-sm text-slate-300 mt-2">{r.comment}</div>
+                )}
+                <div className="text-xs text-slate-400 mt-1">
+                  {new Date(r.created_at || "").toLocaleDateString()}
+                </div>
+              </div>
+            ))}
+            {ownerReviews.length > 3 && (
+              <Button
+                variant="outline"
+                onClick={() => setShowAllOwnerReviews(!showAllOwnerReviews)}
+                className="w-full"
+              >
+                {showAllOwnerReviews ? "Ver menos" : `Ver más reseñas (${ownerReviews.length - 3} más)`}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Reseñas como cuidador */}
+      {sitterReviews.length > 0 && (
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 p-3 sm:p-4 mt-6">
+          <div className="font-semibold mb-3">Reseñas como cuidador</div>
+          <div className="text-sm text-slate-500 mb-3">
+            Reseñas que los dueños han dejado sobre ti como cuidador.
+          </div>
+          <div className="space-y-3">
+            {(showAllSitterReviews ? sitterReviews : sitterReviews.slice(0, 3)).map((r: any) => (
+              <div key={r.id} className="rounded-xl border border-slate-200 dark:border-slate-800 p-3">
+                <div className="flex items-center justify-between">
+                  <div className="font-medium text-sm">{r.author}</div>
+                  <StarRating value={r.rating} size="sm" />
+                </div>
+                {r.comment && (
+                  <div className="text-sm text-slate-300 mt-2">{r.comment}</div>
+                )}
+                <div className="text-xs text-slate-400 mt-1">
+                  {new Date(r.created_at || "").toLocaleDateString()}
+                </div>
+              </div>
+            ))}
+            {sitterReviews.length > 3 && (
+              <Button
+                variant="outline"
+                onClick={() => setShowAllSitterReviews(!showAllSitterReviews)}
+                className="w-full"
+              >
+                {showAllSitterReviews ? "Ver menos" : `Ver más reseñas (${sitterReviews.length - 3} más)`}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

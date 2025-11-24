@@ -53,6 +53,16 @@ export default function ServicesManager() {
     setList((prev) => prev.map((x) => (x.id === s.id ? s : x)));
   };
 
+  const remove = async (id: string) => {
+    if (!confirm("¿Eliminar este servicio?")) return;
+    try {
+      await ServicesAPI.remove(id);
+      setList((prev) => prev.filter((x) => x.id !== id));
+    } catch (e: any) {
+      alert(e?.message || "No se pudo eliminar el servicio");
+    }
+  };
+
   return (
     <div>
       <h1 className="text-xl font-semibold mb-3">Mis servicios</h1>
@@ -92,13 +102,28 @@ export default function ServicesManager() {
             <li key={s.id} className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 bg-white dark:bg-slate-900">
               <div className="flex items-center gap-2">
                 <div className="font-medium flex-1">{label}</div>
-                <span className="text-sm">€ {s.price}</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  className="input w-20 text-sm"
+                  value={s.price}
+                  onChange={(e) => update(s.id, Number(e.target.value) || 0, s.description)}
+                />
+                <span className="text-sm">€</span>
                 <button
                   className={`h-8 px-3 rounded-full border ${s.enabled ? "border-emerald-500 text-emerald-600" : "border-slate-400 text-slate-500"}`}
                   onClick={() => toggle(s.id, s.enabled)}
                   title={s.enabled ? "Desactivar" : "Activar"}
                 >
                   {s.enabled ? "Activo" : "Inactivo"}
+                </button>
+                <button
+                  className="h-8 px-3 rounded-full border border-red-500 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                  onClick={() => remove(s.id)}
+                  title="Eliminar"
+                >
+                  🗑️
                 </button>
               </div>
               <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">

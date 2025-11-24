@@ -70,9 +70,20 @@ export interface SitterCard {
 // ======================== AUTH =============================
 export const AuthAPI = {
   async signup(payload: {
-    name: string; email: string; password: string;
-    city?: string; is_caretaker?: boolean;
-    photo?: string; bio?: string; // NUEVO
+    name: string;
+    email: string;
+    password: string;
+    city?: string;
+    is_caretaker?: boolean;
+    photo?: string;
+    bio?: string;
+    gallery?: string[];
+    max_pets?: number;
+    accepts_sizes?: string[];
+    lat?: number;
+    lng?: number;
+    address?: string;
+    phone?: string;
   }) {
     return request("/auth/signup", { method: "POST", body: JSON.stringify(payload) });
   },
@@ -103,7 +114,9 @@ export const UsersAPI = {
 // ======================== PETS =============================
 export const PetsAPI = {
   list: () => request<Pet[]>("/pets"),
+  listMine: () => request<Pet[]>("/pets/my"), // Filtra por usuario actual
   create: (payload: Omit<Pet, "id">) => request<Pet>("/pets", { method: "POST", body: JSON.stringify(payload) }),
+  update: (id: string, payload: Partial<Omit<Pet, "id">>) => request<Pet>(`/pets/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   remove: (id: string) => request(`/pets/${id}`, { method: "DELETE" }),
 };
 // ===========================================================
@@ -224,6 +237,12 @@ export const MessagesAPI = {
   
   markThreadRead: (threadId: string) =>
     request<{ updated: number }>(`/messages/thread/${threadId}/read-all`, { method: "PATCH" }),
+  
+  update: (messageId: string, body: string) =>
+    request<Message>(`/messages/${messageId}`, { method: "PATCH", body: JSON.stringify({ body }) }),
+  
+  delete: (messageId: string) =>
+    request(`/messages/${messageId}`, { method: "DELETE" }),
 };
 // ===========================================================
 
@@ -285,11 +304,32 @@ export const ReportsAPI = {
 
 // ======================== REVIEWS ==========================
 export const ReviewsAPI = {
-  // crear reseña
-  create: (payload: { booking_id: string; sitter_id: string; rating: number; comment?: string }) =>
+  // crear reseña (tipo: sitter|owner|pet)
+  create: (payload: { 
+    booking_id: string; 
+    sitter_id?: string; 
+    owner_id?: string;
+    pet_id?: string;
+    review_type?: "sitter" | "owner" | "pet";
+    rating: number; 
+    comment?: string 
+  }) =>
     request("/reviews", { method: "POST", body: JSON.stringify(payload) }),
 
   listBySitter: (sitterId: string) => request<any[]>(`/reviews?sitter_id=${encodeURIComponent(sitterId)}`),
+  listByOwner: (ownerId: string) => request<any[]>(`/reviews?owner_id=${encodeURIComponent(ownerId)}`),
+  listByPet: (petId: string) => request<any[]>(`/reviews?pet_id=${encodeURIComponent(petId)}`),
+  listByBooking: (bookingId: string, reviewType?: string) => {
+    const params = new URLSearchParams({ booking_id: bookingId });
+    if (reviewType) params.append("review_type", reviewType);
+    return request<any[]>(`/reviews?${params.toString()}`);
+  },
+  
+  // Editar y eliminar
+  update: (reviewId: string, payload: { rating?: number; comment?: string }) =>
+    request(`/reviews/${reviewId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  delete: (reviewId: string) =>
+    request(`/reviews/${reviewId}`, { method: "DELETE" }),
 };
 
 export const getSitterReviews = (sitterId: string) => ReviewsAPI.listBySitter(sitterId);
@@ -299,25 +339,11 @@ export const getSitterReviews = (sitterId: string) => ReviewsAPI.listBySitter(si
 export async function createCheckoutSession(
   plan: "pro" | "free" = "pro"
 ): Promise<{ url: string }> {
-  // 1) Ruta "normal" (Stripe): devuelve { url }
-  try {
-    return await request<{ url: string }>("/billing/checkout-session", {
-      method: "POST",
-      body: JSON.stringify({ plan }),
-    });
-  } catch {
-    // 2) Fallback demo/mock: alterna el plan sin pago y redirige a /pricing
-    // Ajusta la ruta si tu mock usa otro path.
-    try {
-      await request("/billing/mock/upgrade", {
-        method: "POST",
-        body: JSON.stringify({ plan }),
-      });
-      return { url: "/pricing?upgraded=1" };
-    } catch (e) {
-      throw e;
-    }
-  }
+  // Usar el endpoint correcto del router de billing
+  return await request<{ url: string }>("/billing/create-checkout-session", {
+    method: "POST",
+    body: JSON.stringify({ plan }),
+  });
 }
 // ===========================================================
 
@@ -348,6 +374,14 @@ export const PaymentsAPI = {
   
   getByBooking: (bookingId: string) =>
     request<Payment | null>(`/payments/booking/${bookingId}`),
+  
+  getCaretakerStats: () => request<{
+    total_earnings: number;
+    total_payments: number;
+    total_platform_fee: number;
+    pending_earnings: number;
+    pending_count: number;
+  }>("/payments/caretaker/stats"),
   
   refund: (paymentId: string) =>
     request<Payment>(`/payments/${paymentId}/refund`, { method: "POST" }),

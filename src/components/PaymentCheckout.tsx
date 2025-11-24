@@ -7,7 +7,7 @@ interface Props {
   bookingId: string;
   amount: number;
   onSuccess: (payment: Payment) => void;
-  onCancel: () => void;
+  onCancel?: () => void;
 }
 
 export default function PaymentCheckout({ bookingId, amount, onSuccess, onCancel }: Props) {
@@ -139,7 +139,14 @@ export default function PaymentCheckout({ bookingId, amount, onSuccess, onCancel
                 type="text"
                 placeholder="MM/AA"
                 value={cardExpiry}
-                onChange={(e) => setCardExpiry(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                onChange={(e) => {
+                  let value = e.target.value.replace(/\D/g, "").slice(0, 4);
+                  // Formatear con separador "/" después de 2 dígitos
+                  if (value.length > 2) {
+                    value = value.slice(0, 2) + "/" + value.slice(2);
+                  }
+                  setCardExpiry(value);
+                }}
                 className="input w-full"
                 required
               />
@@ -167,10 +174,12 @@ export default function PaymentCheckout({ bookingId, amount, onSuccess, onCancel
       )}
 
       <div className="flex gap-2">
-        <Button type="button" variant="outline" onClick={onCancel} className="flex-1">
-          Cancelar
-        </Button>
-        <Button type="submit" variant="brand" disabled={processing} className="flex-1">
+        {onCancel && (
+          <Button type="button" variant="outline" onClick={onCancel} className="flex-1">
+            Cancelar
+          </Button>
+        )}
+        <Button type="submit" variant="brand" disabled={processing} className={onCancel ? "flex-1" : "w-full"}>
           {processing ? "Procesando..." : `Pagar €${total.toFixed(2)}`}
         </Button>
       </div>
